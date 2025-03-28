@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cat Cloud Proxy Demo</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://download.agora.io/sdk/release/AgoraRTC_N.js"></script>
+    <script src="https://www.gstatic.com/charts/loader.js"></script>
+    <script src="./agora-extension-virtual-background_2_1_0/agora-extension-virtual-background.js"></script>
+    <script src="./aiDenoiserExtension/index.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <img src="https://external-preview.redd.it/psbattle-this-silly-cat-v0-wBI0MzDN_yfD5jdY7ySASwg3KecJGGLa749_jiG5dVs.jpg?width=640&crop=smart&auto=webp&s=bc20d15296fadb878300018f1ec9cf8ddc8c1899" alt="Cat Logo">
+                <h1>Cat Cloud Proxy</h1>
+            </div>
+            <div class="invite-link">
+                <input type="text" id="inviteLink" readonly>
+                <button onclick="copyInviteLink()">Copy Link</button>
+            </div>
+        </header>
+
+        <main>
+            <div class="controls">
+                <div class="input-group">
+                    <label for="appId">APP ID</label>
+                    <input type="text" id="appId" placeholder="Enter your APP ID">
+                </div>
+                <div class="input-group">
+                    <label for="token">Token (optional)</label>
+                    <input type="text" id="token" placeholder="Enter token">
+                </div>
+                <div class="input-group">
+                    <label for="channelName">Channel Name</label>
+                    <input type="text" id="channelName" placeholder="Enter channel name">
+                </div>
+                <div class="input-group">
+                    <label for="userId">User ID (optional)</label>
+                    <input type="text" id="userId" placeholder="Enter user ID">
+                </div>
+                <div class="input-group">
+                    <label for="micSelect">Select Microphone</label>
+                    <select id="micSelect"></select>
+                </div>
+                <div class="input-group">
+                    <label for="cameraSelect">Select Camera</label>
+                    <select id="cameraSelect"></select>
+                </div>
+                <div class="input-group">
+                    <label for="videoProfile">Video Profile</label>
+                    <select id="videoProfile">
+                        <option value="">480p</option>
+                        <option value="720p">720p</option>
+                        <option value="1080p">1080p</op480ption>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label for="cloudProxy">Cloud Proxy</label>
+                    <select id="cloudProxy">
+                        <option value="disabled">Disabled</option>
+                        <option value="enabled">Enabled</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label for="geoFence">Geo-Fence</label>
+                    <select id="geoFence">
+                        <option value="global">Global</option>
+                        <option value="us">United States</option>
+                        <option value="eu">Europe</option>
+                        <option value="asia">Asia</option>
+                        <option value="china">China</option>
+                        <option value="india">India</option>
+                        <option value="japan">Japan</option>
+                        <option value="korea">Korea</option>
+                        <option value="oceania">Oceania</option>
+                        <option value="south_america">South America</option>
+                        <option value="africa">Africa</option>
+                        <option value="hong_kong">Hong Kong & Macau</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button id="joinBtn" class="primary">Join Channel</button>
+                <button id="leaveBtn" class="danger" disabled>Leave Channel</button>
+                <button id="muteMicBtn">Mute Mic</button>
+                <button id="muteCameraBtn">Mute Camera</button>
+                <button id="dualStreamBtn">Enable Dual Stream</button>
+                <button id="switchStreamBtn">Switch Stream</button>
+                <button id="virtualBgBtn">Toggle Virtual Background</button>
+                <button id="ainsBtn">Toggle AINS</button>
+            </div>
+
+            <div class="stats-overview">
+                <div id="overallStats" class="stats"></div>
+                <div class="graphs-container">
+                    <div id="networkQualityChart"></div>
+                    <div id="fpsChart"></div>
+                </div>
+            </div>
+
+            <div class="video-container">
+                <div class="video-wrapper">
+                    <div class="video-box">
+                        <div id="localVideo"></div>
+                        <div id="localVideoStats" class="video-overlay-stats"></div>
+                    </div>
+                </div>
+                <div class="video-wrapper">
+                    <div class="video-box">
+                        <div id="remoteVideo"></div>
+                        <div id="remoteVideoStats" class="video-overlay-stats"></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html> 
