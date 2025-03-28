@@ -11,6 +11,10 @@ let isAinsEnabled = false;
 let startTime;
 let statsInterval;
 
+// Add new variables for virtual background
+let lastVirtualBgCost = 0;
+let settingsToggleBtn;
+
 // DOM Elements
 const appIdInput = document.getElementById('appId');
 const tokenInput = document.getElementById('token');
@@ -38,14 +42,47 @@ const localFpsGraph = document.getElementById('localFpsGraph');
 const remoteNetworkGraph = document.getElementById('remoteNetworkGraph');
 const remoteFpsGraph = document.getElementById('remoteFpsGraph');
 
-// Initialize Google Charts
-google.charts.load('current', {'packages':['corechart']});
-google.charts.setOnLoadCallback(initializeCharts);
+// Add new DOM elements for virtual background controls
+const virtualBgTypeSelect = document.getElementById('virtualBgType');
+const virtualBgColorGroup = document.getElementById('virtualBgColorGroup');
+const virtualBgColorInput = document.getElementById('virtualBgColor');
+const colorValueDisplay = document.getElementById('colorValue');
+const virtualBgImgGroup = document.getElementById('virtualBgImgGroup');
+const virtualBgImgUrlInput = document.getElementById('virtualBgImgUrl');
+const virtualBgVideoGroup = document.getElementById('virtualBgVideoGroup');
+const virtualBgVideoUrlInput = document.getElementById('virtualBgVideoUrl');
+const virtualBgBlurGroup = document.getElementById('virtualBgBlurGroup');
+const virtualBgBlurSelect = document.getElementById('virtualBgBlur');
 
+// Add new chart variables
+let virtualBgCostChart;
+let resolutionChart;
+let virtualBgCostData;
+let resolutionData;
 let networkChart;
 let fpsChart;
 let networkData;
 let fpsData;
+
+// Define chart options globally
+const chartOptions = {
+    curveType: 'function',
+    legend: { position: 'bottom' },
+    backgroundColor: { fill: 'transparent' },
+    hAxis: { textPosition: 'none' },
+    vAxis: { minValue: 0 },
+    animation: {
+        duration: 0 // Disable animation to prevent blinking
+    },
+    tooltip: {
+        trigger: 'focus',
+        ignoreBounds: true
+    }
+};
+
+// Initialize Google Charts
+google.charts.load('current', {'packages':['corechart']});
+google.charts.setOnLoadCallback(initializeCharts);
 
 function initializeCharts() {
     networkData = new google.visualization.DataTable();
@@ -58,47 +95,92 @@ function initializeCharts() {
     fpsData.addColumn('number', 'Local FPS');
     fpsData.addColumn('number', 'Remote FPS');
 
-    const chartOptions = {
-        curveType: 'function',
-        legend: { position: 'bottom' },
-        backgroundColor: { fill: 'transparent' },
-        hAxis: { textPosition: 'none' },
-        vAxis: { minValue: 0 },
-        animation: {
-            duration: 500,
-            easing: 'out'
-        }
-    };
+    virtualBgCostData = new google.visualization.DataTable();
+    virtualBgCostData.addColumn('number', 'Time');
+    virtualBgCostData.addColumn('number', 'Cost');
+
+    resolutionData = new google.visualization.DataTable();
+    resolutionData.addColumn('number', 'Time');
+    resolutionData.addColumn('number', 'Send Width');
+    resolutionData.addColumn('number', 'Send Height');
+    resolutionData.addColumn('number', 'Receive Width');
+    resolutionData.addColumn('number', 'Receive Height');
 
     networkChart = new google.visualization.LineChart(document.getElementById('networkQualityChart'));
     fpsChart = new google.visualization.LineChart(document.getElementById('fpsChart'));
+    virtualBgCostChart = new google.visualization.LineChart(document.getElementById('virtualBgCostChart'));
+    resolutionChart = new google.visualization.LineChart(document.getElementById('resolutionChart'));
 
     networkChart.draw(networkData, {
         ...chartOptions,
         title: 'Network Quality',
-        vAxis: { title: 'Bitrate (Mbps)' }
+        vAxis: { title: 'Bitrate (Mbps)', minValue: 0, maxValue: 10 }
     });
 
     fpsChart.draw(fpsData, {
         ...chartOptions,
         title: 'Frame Rate',
-        vAxis: { title: 'FPS' }
+        vAxis: { title: 'FPS', minValue: 0, maxValue: 60 }
+    });
+
+    virtualBgCostChart.draw(virtualBgCostData, {
+        ...chartOptions,
+        title: 'Virtual Background Cost',
+        vAxis: { title: 'Cost', minValue: 0 }
+    });
+
+    resolutionChart.draw(resolutionData, {
+        ...chartOptions,
+        title: 'Resolution',
+        vAxis: { title: 'Pixels', minValue: 0, maxValue: 1920 }
     });
 }
 
 // Video profiles configuration
 const videoProfiles = [
-    { label: "360p_1", detail: "640x360, 15fps, 400Kbps", value: "360p_1" },
-    { label: "360p_4", detail: "640x360, 30fps, 600Kbps", value: "360p_4" },
-    { label: "480p_8", detail: "848×480, 15fps, 610Kbps", value: "480p_8" },
-    { label: "480p_9", detail: "848×480, 30fps, 930Kbps", value: "480p_9" },
-    { label: "720p_1", detail: "1280×720, 15fps, 1130Kbps", value: "720p_1" },
-    { label: "720p_2", detail: "1280×720, 30fps, 2000Kbps", value: "720p_2" },
-    { label: "720p_auto", detail: "1280×720, 30fps, 3000Kbps", value: "720p_auto" },
-    { label: "1080p_1", detail: "1920×1080, 15fps, 2080Kbps", value: "1080p_1" },
-    { label: "1080p_2", detail: "1920×1080, 30fps, 3000Kbps", value: "1080p_2" },
-    { label: "1080p_5", detail: "1920×1080, 60fps, 4780Kbps", value: "1080p_5" }
-];
+    { label: "120p", detail: "160×120, 15fps", value: "120p" },
+    { label: "120p_1", detail: "160×120, 15fps", value: "120p_1" },
+    { label: "120p_3", detail: "120×120, 15fps", value: "120p_3" },
+    { label: "180p", detail: "320×180, 15fps", value: "180p" },
+    { label: "180p_1", detail: "320×180, 15fps", value: "180p_1" },
+    { label: "180p_3", detail: "180×180, 15fps", value: "180p_3" },
+    { label: "180p_4", detail: "240×180, 15fps", value: "180p_4" },
+    { label: "240p", detail: "320×240, 15fps", value: "240p" },
+    { label: "240p_1", detail: "320×240, 15fps", value: "240p_1" },
+    { label: "240p_3", detail: "240×240, 15fps", value: "240p_3" },
+    { label: "240p_4", detail: "424×240, 15fps", value: "240p_4" },
+    { label: "360p", detail: "640×360, 15fps", value: "360p" },
+    { label: "360p_1", detail: "640×360, 15fps", value: "360p_1" },
+    { label: "360p_3", detail: "360×360, 15fps", value: "360p_3" },
+    { label: "360p_4", detail: "640×360, 30fps", value: "360p_4" },
+    { label: "360p_6", detail: "360×360, 30fps", value: "360p_6" },
+    { label: "360p_7", detail: "480×360, 15fps", value: "360p_7" },
+    { label: "360p_8", detail: "480×360, 30fps", value: "360p_8" },
+    { label: "360p_9", detail: "640×360, 15fps", value: "360p_9" },
+    { label: "360p_10", detail: "640×360, 24fps", value: "360p_10" },
+    { label: "360p_11", detail: "640×360, 24fps", value: "360p_11" },
+    { label: "480p", detail: "640×480, 15fps", value: "480p" },
+    { label: "480p_1", detail: "640×480, 15fps", value: "480p_1" },
+    { label: "480p_2", detail: "640×480, 30fps", value: "480p_2" },
+    { label: "480p_3", detail: "480×480, 15fps", value: "480p_3" },
+    { label: "480p_4", detail: "640×480, 30fps", value: "480p_4" },
+    { label: "480p_6", detail: "480×480, 30fps", value: "480p_6" },
+    { label: "480p_8", detail: "848×480, 15fps", value: "480p_8" },
+    { label: "480p_9", detail: "848×480, 30fps", value: "480p_9" },
+    { label: "480p_10", detail: "640×480, 10fps", value: "480p_10" },
+    { label: "720p", detail: "1280×720, 15fps", value: "720p" },
+    { label: "720p_1", detail: "1280×720, 15fps", value: "720p_1" },
+    { label: "720p_2", detail: "1280×720, 30fps", value: "720p_2" },
+    { label: "720p_3", detail: "1280×720, 30fps", value: "720p_3" },
+    { label: "720p_auto", detail: "1280×720, 30fps", value: "720p_auto" },
+    { label: "720p_5", detail: "960×720, 15fps", value: "720p_5" },
+    { label: "720p_6", detail: "960×720, 30fps", value: "720p_6" },
+    { label: "1080p", detail: "1920×1080, 15fps", value: "1080p" },
+    { label: "1080p_1", detail: "1920×1080, 15fps", value: "1080p_1" },
+    { label: "1080p_2", detail: "1920×1080, 30fps", value: "1080p_2" },
+    { label: "1080p_3", detail: "1920×1080, 30fps", value: "1080p_3" },
+    { label: "1080p_5", detail: "1920×1080, 60fps", value: "1080p_5" }
+  ];
 
 // Regions configuration
 const regions = [
@@ -190,7 +272,8 @@ function setupEventHandlers() {
             if (user.uid === client.uid) {
                 await client2.subscribe(user, mediaType);
                 console.log("Client2 subscribed to", mediaType, "from user", user.uid);
-                
+                client2.setStreamFallbackOption(user, 0);
+
                 if (mediaType === "video" && user.videoTrack) {
                     remoteVideoTrack = user.videoTrack;
                     remoteVideo.innerHTML = ''; // Clear no-video div
@@ -259,6 +342,28 @@ async function createLocalTracks() {
         localVideoTrack.play("localVideo");
     } catch (error) {
         console.error("Error creating local tracks:", error);
+        throw error;
+    }
+}
+
+// Create local video track
+async function createLocalVideoTrack() {
+    try {
+        const selectedProfile = videoProfileSelect.value || "720p_3"; // Default to 720p_3 if none selected
+        const config = videoProfiles.find(p => p.value === selectedProfile) || videoProfiles.find(p => p.value === "720p_3");
+        
+        localVideoTrack = await AgoraRTC.createCameraVideoTrack({
+            encoderConfig: config.value,
+            optimizationMode: "motion",
+            source: cameraSelect.value
+        });
+        
+        // Set initial encoder configuration
+        await localVideoTrack.setEncoderConfiguration(config.value);
+        
+        // ... rest of the function ...
+    } catch (error) {
+        console.error("Error creating local video track:", error);
         throw error;
     }
 }
@@ -530,20 +635,39 @@ async function toggleDualStream() {
 
 // Switch stream quality
 async function switchStream() {
-    if (!client2) return;
+    if (!client2 || !client2.remoteUsers.length) {
+        showPopup("No remote user to switch stream");
+        return;
+    }
+
+    const remoteUser = client2.remoteUsers.find(user => user.uid === client.uid);
+    if (!remoteUser) {
+        showPopup("Remote user not found");
+        return;
+    }
 
     try {
-        const remoteUser = client2.remoteUsers.find(user => user.uid === client.uid);
-        if (!remoteUser || !remoteUser.videoTrack) return;
+        // Get current stream type from button text
+        const currentText = switchStreamBtn.textContent;
+        let newStreamType;
+        let newButtonText;
 
-        // Toggle between high (0) and low (1) quality
-        const currentStreamType = remoteUser.videoTrack._streamType;
-        const newStreamType = currentStreamType === 0 ? 1 : 0;
+        if (currentText === "Set to High Quality") {
+            newStreamType = 0; // High quality
+            newButtonText = "Set to Low Quality";
+        } else if (currentText === "Set to Low Quality") {
+            newStreamType = 1; // Low quality
+            newButtonText = "Set to High Quality";
+        }
         
+        // Set the stream type for the remote user
         await client2.setRemoteVideoStreamType(remoteUser.uid, newStreamType);
-        switchStreamBtn.textContent = `Switch to ${newStreamType === 0 ? "Low" : "High"} Quality`;
+        
+        switchStreamBtn.textContent = newButtonText;
+        showPopup(`Switched to ${newStreamType === 0 ? "high" : "low"} quality stream`);
     } catch (error) {
         console.error("Error switching stream:", error);
+        showPopup("Failed to switch stream quality");
     }
 }
 
@@ -576,6 +700,73 @@ function showPopup(message) {
     }, 5000); // Increased from 3000 to 5000ms
 }
 
+// Add event listener for virtual background type change
+virtualBgTypeSelect.addEventListener('change', () => {
+    // Hide all groups first
+    virtualBgColorGroup.style.display = 'none';
+    virtualBgImgGroup.style.display = 'none';
+    virtualBgVideoGroup.style.display = 'none';
+    virtualBgBlurGroup.style.display = 'none';
+
+    // Show relevant group based on selection
+    switch (virtualBgTypeSelect.value) {
+        case 'color':
+            virtualBgColorGroup.style.display = 'flex';
+            break;
+        case 'img':
+            virtualBgImgGroup.style.display = 'flex';
+            break;
+        case 'video':
+            virtualBgVideoGroup.style.display = 'flex';
+            break;
+        case 'blur':
+            virtualBgBlurGroup.style.display = 'flex';
+            break;
+    }
+});
+
+// Add event listener for color picker
+virtualBgColorInput.addEventListener('input', (e) => {
+    colorValueDisplay.textContent = e.target.value;
+});
+
+// Add event listener for blur slider
+virtualBgBlurSelect.addEventListener('input', (e) => {
+    const value = parseInt(e.target.value);
+    const blurValue = document.getElementById('blurValue');
+    blurValue.textContent = value === 1 ? 'Low' : value === 2 ? 'Medium' : 'High';
+});
+
+// Helper function to load media with CORS handling
+async function loadMediaWithCORS(url, type) {
+    try {
+        if (type === 'img') {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.src = url;
+            await new Promise((resolve, reject) => {
+                img.onload = resolve;
+                img.onerror = reject;
+            });
+            return img;
+        } else if (type === 'video') {
+            const video = document.createElement('video');
+            video.crossOrigin = "anonymous";
+            video.src = url;
+            video.loop = true;
+            video.muted = true;
+            await new Promise((resolve, reject) => {
+                video.onloadeddata = resolve;
+                video.onerror = reject;
+            });
+            return video;
+        }
+    } catch (error) {
+        console.error(`Error loading ${type}:`, error);
+        throw new Error(`Failed to load ${type}. Make sure the URL is CORS-enabled.`);
+    }
+}
+
 // Toggle virtual background
 async function toggleVirtualBackground() {
     if (!localVideoTrack) {
@@ -598,15 +789,15 @@ async function toggleVirtualBackground() {
             
             // Set up event handlers
             processor.eventBus.on("PERFORMANCE_WARNING", () => {
-                console.warn("Performance warning!!!!!!!!!!!!!!!!!");
+                console.warn("Performance warning!");
                 showPopup("VirtualBackground performance warning!");
             });
             processor.eventBus.on("cost", (cost) => {
                 console.warn(`cost of vb is ${cost}`);
-                showPopup(`VirtualBackground cost: ${cost}`);
+                lastVirtualBgCost = cost;
             });
             processor.onoverload = async () => {
-                console.log("overload!!!");
+                console.log("overload!");
                 showPopup("VirtualBackground overload!");
             };
 
@@ -619,27 +810,80 @@ async function toggleVirtualBackground() {
                 return;
             }
 
-            // Set options and enable
-            processor.setOptions({type: 'blur', blurDegree: 3});
+            // Set options based on selected type
+            const options = {
+                type: virtualBgTypeSelect.value,
+                fit: 'cover'
+            };
+
+            switch (virtualBgTypeSelect.value) {
+                case 'color':
+                    options.color = virtualBgColorInput.value;
+                    break;
+                case 'img':
+                    try {
+                        options.source = await loadMediaWithCORS(virtualBgImgUrlInput.value, 'img');
+                    } catch (error) {
+                        showPopup(error.message);
+                        return;
+                    }
+                    break;
+                case 'video':
+                    try {
+                        options.source = await loadMediaWithCORS(virtualBgVideoUrlInput.value, 'video');
+                    } catch (error) {
+                        showPopup(error.message);
+                        return;
+                    }
+                    break;
+                case 'blur':
+                    options.blurDegree = parseInt(virtualBgBlurSelect.value);
+                    break;
+                case 'none':
+                    // No additional options needed
+                    break;
+            }
+
+            processor.setOptions(options);
             await processor.enable();
             
-            // Pipe the processor
+            // Always unpipe first to ensure clean state
+            try {
+                await localVideoTrack.unpipe();
+            } catch (error) {
+                console.log("No existing pipe to unpipe");
+            }
+            
+            // Pipe the processor to the destination
             await localVideoTrack.pipe(processor).pipe(localVideoTrack.processorDestination);
             
             isVirtualBackgroundEnabled = true;
             virtualBgBtn.textContent = "Disable Virtual Background";
-            showPopup("VirtualBackground enabled!");
+            showPopup("Virtual background enabled");
         } else {
             console.log("Disabling virtual background...");
             showPopup("Disabling virtual background...");
-            await localVideoTrack.unpipe();
+            
+            // Get the processor from the track
+            const processor = localVideoTrack.processor;
+            if (processor) {
+                // First unpipe the processor
+                await localVideoTrack.unpipe();
+                // Then disable and release
+                await processor.unpipe();
+                await processor.disable();
+                await processor.release();
+                // Clear the processor reference
+                localVideoTrack.processor = null;
+            }
+            
             isVirtualBackgroundEnabled = false;
             virtualBgBtn.textContent = "Enable Virtual Background";
-            showPopup("VirtualBackground disabled!");
+            showPopup("Virtual background disabled");
         }
     } catch (error) {
         console.error("Error toggling virtual background:", error);
-        showPopup("Error toggling virtual background");
+        showPopup("Failed to toggle virtual background");
     }
 }
 
@@ -805,6 +1049,10 @@ function updateStats(clientStats, clientStats2, localVideoStats, remoteVideoStat
     // Update charts
     const time = (Date.now() - startTime) / 1000;
     
+    // Cap FPS values at 60
+    const localFPS = Math.min(localVideoStats.sendFrameRate, 60);
+    const remoteFPS = remoteVideoStats ? Math.min(remoteVideoStats.receiveFrameRate, 60) : 0;
+    
     networkData.addRow([
         time,
         Number(clientStats.SendBitrate) * 0.000001,
@@ -813,8 +1061,8 @@ function updateStats(clientStats, clientStats2, localVideoStats, remoteVideoStat
 
     fpsData.addRow([
         time,
-        localVideoStats.sendFrameRate,
-        remoteVideoStats ? remoteVideoStats.receiveFrameRate : 0
+        localFPS,
+        remoteFPS
     ]);
 
     if (networkData.getNumberOfRows() > 60) {
@@ -827,17 +1075,65 @@ function updateStats(clientStats, clientStats2, localVideoStats, remoteVideoStat
 
     try {
         networkChart.draw(networkData, {
+            ...chartOptions,
             title: 'Network Quality',
-            vAxis: { title: 'Bitrate (Mbps)' }
+            vAxis: { title: 'Bitrate (Mbps)', minValue: 0, maxValue: 10 }
         });
 
         fpsChart.draw(fpsData, {
+            ...chartOptions,
             title: 'Frame Rate',
-            vAxis: { title: 'FPS' }
+            vAxis: { title: 'FPS', minValue: 0, maxValue: 60 }
         });
     } catch (error) {
         console.error("Error updating charts:", error);
     }
+
+    // Update resolution chart with capped values
+    resolutionData.addRow([
+        time,
+        Math.min(localVideoStats.sendResolutionWidth, 1920),
+        Math.min(localVideoStats.sendResolutionHeight, 1080),
+        remoteVideoStats ? Math.min(remoteVideoStats.receiveResolutionWidth, 1920) : 0,
+        remoteVideoStats ? Math.min(remoteVideoStats.receiveResolutionHeight, 1080) : 0
+    ]);
+
+    if (resolutionData.getNumberOfRows() > 60) {
+        resolutionData.removeRow(0);
+    }
+
+    try {
+        resolutionChart.draw(resolutionData, {
+            ...chartOptions,
+            title: 'Resolution',
+            vAxis: { title: 'Pixels', minValue: 0, maxValue: 1920 }
+        });
+    } catch (error) {
+        console.error("Error updating resolution chart:", error);
+    }
+
+    // Update virtual background cost chart
+    virtualBgCostData.addRow([time, lastVirtualBgCost]);
+    if (virtualBgCostData.getNumberOfRows() > 60) {
+        virtualBgCostData.removeRow(0);
+    }
+
+    try {
+        virtualBgCostChart.draw(virtualBgCostData, {
+            ...chartOptions,
+            title: 'Virtual Background Cost',
+            vAxis: { title: 'Cost', minValue: 0 }
+        });
+    } catch (error) {
+        console.error("Error updating virtual background cost chart:", error);
+    }
+}
+
+// Add settings toggle functionality
+function toggleSettings() {
+    const controls = document.querySelector('.controls');
+    controls.classList.toggle('hidden');
+    settingsToggleBtn.textContent = controls.classList.contains('hidden') ? 'Show Settings' : 'Hide Settings';
 }
 
 // Initialize everything after DOM is loaded
@@ -852,7 +1148,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Populate video profiles
     videoProfileSelect.innerHTML = videoProfiles.map(profile => 
-        `<option value="${profile.value}" title="${profile.detail}">${profile.label}</option>`
+        `<option value="${profile.value}" title="${profile.detail}" ${profile.value === "720p_3" ? "selected" : ""}>${profile.label}</option>`
     ).join('');
 
     // Populate regions
@@ -897,6 +1193,30 @@ document.addEventListener('DOMContentLoaded', () => {
                 title: 'Frame Rate',
                 vAxis: { title: 'FPS' }
             });
+        }
+    });
+
+    // Add settings toggle button
+    settingsToggleBtn = document.createElement('button');
+    settingsToggleBtn.className = 'settings-toggle';
+    settingsToggleBtn.textContent = 'Hide Settings';
+    settingsToggleBtn.addEventListener('click', toggleSettings);
+    document.body.appendChild(settingsToggleBtn);
+
+    // Add video profile change handler
+    videoProfileSelect.addEventListener('change', async () => {
+        if (!localVideoTrack) {
+            showPopup("No video track available");
+            return;
+        }
+
+        try {
+            const selectedProfile = videoProfileSelect.value;
+            await localVideoTrack.setEncoderConfiguration(selectedProfile);
+            showPopup(`Video profile updated to ${selectedProfile}`);
+        } catch (error) {
+            console.error("Error updating video profile:", error);
+            showPopup("Failed to update video profile");
         }
     });
 }); 
