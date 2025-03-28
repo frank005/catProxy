@@ -25,8 +25,8 @@ A modern web-based video conferencing application built with Agora RTC SDK, feat
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/catAgora.git
-cd catAgora
+git clone https://github.com/yourusername/catProxy.git
+cd catProxy
 ```
 
 2. Open `index.html` in your web browser or serve it using a local web server.
