@@ -226,10 +226,12 @@ header {
 }
 
 #networkQualityChart,
-#fpsChart {
+#fpsChart,
+#virtualBgCostChart,
+#resolutionChart {
     width: 100%;
     height: 100%;
-    background: #ffcc99;
+    background: #ffffff;
     border-radius: 8px;
     border: 1px solid #dee2e6;
 }
@@ -408,7 +410,9 @@ body::before {
     }
     
     #networkQualityChart,
-    #fpsChart {
+    #fpsChart, 
+    #virtualBgCostChart,
+    #resolutionChart {
         height: 200px;
     }
 }
