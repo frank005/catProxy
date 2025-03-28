@@ -117,7 +117,7 @@ function initializeCharts() {
 
     networkChart.draw(networkData, {
         ...chartOptions,
-        title: 'Network Quality',
+        title: 'Network Bandwidth',
         vAxis: { title: 'Bitrate (Mbps)', minValue: 0, maxValue: 10 }
     });
 
@@ -492,7 +492,7 @@ async function joinChannel() {
             showPopup("Audio muted by default");
         }
 
-        updateInviteLink();
+        //updateInviteLink();
         showPopup("Successfully joined channel!");
     } catch (error) {
         console.error("Error joining channel:", error);
@@ -589,16 +589,16 @@ async function leaveChannel() {
             document.getElementById('remoteVideoStats').innerHTML = '';
         }
 
-        // Leave channels
-        showPopup("Leaving channels...");
-        if (client) {
-            await client.leave();
-        }
-        if (client2) {
-            await client2.leave();
-        }
-        
-        stopStatsMonitoring();
+        // Reset states
+        isVirtualBackgroundEnabled = false;
+        isDualStreamEnabled = false;
+        isAinsEnabled = false;
+        virtualBgBtn.textContent = "Enable Virtual Background";
+        dualStreamBtn.textContent = "Enable Dual Stream";
+        ainsBtn.textContent = "Enable AINS";
+        muteMicBtn.textContent = "Mute Mic";
+        muteCameraBtn.textContent = "Mute Camera";
+        switchStreamBtn.textContent = "Set to Low Quality";
 
         // Update UI
         joinBtn.disabled = false;
@@ -610,7 +610,19 @@ async function leaveChannel() {
         [muteMicBtn, muteCameraBtn, dualStreamBtn, switchStreamBtn, virtualBgBtn, ainsBtn].forEach(btn => {
             btn.disabled = true;
             btn.style.opacity = '0.5';
+            btn.style.background = '#fff3cd';
         });
+
+        // Leave channels
+        showPopup("Leaving channels...");
+        if (client) {
+            await client.leave();
+        }
+        if (client2) {
+            await client2.leave();
+        }
+        
+        stopStatsMonitoring();
 
         showPopup("Successfully left channel!");
 
@@ -1014,12 +1026,12 @@ async function toggleAins() {
     }
 }
 
-// Update invite link
+/* Update invite link
 function updateInviteLink() {
     const channelName = channelNameInput.value;
     const inviteLink = `${window.location.origin}?channel=${channelName}`;
     document.getElementById('inviteLink').value = inviteLink;
-}
+}*/
 
 // Copy invite link
 function copyInviteLink() {
