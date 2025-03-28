@@ -139,10 +139,16 @@ const proxyModes = [
 
 // Initialize Agora client
 async function initializeAgoraClient() {
+    // Set WebAudio initialization options
+    AgoraRTC.setParameter('WEBAUDIO_INIT_OPTIONS', {
+        latencyHint: 0.03,
+        sampleRate: 48000,
+    });
+
     client = AgoraRTC.createClient({ mode: "live", codec: "vp9" });
-    await client.setClientRole("host");
-    
     client2 = AgoraRTC.createClient({ mode: "live", codec: "vp9" });
+
+    await client.setClientRole("host");
     await client2.setClientRole("audience");
 
     setupEventHandlers();
