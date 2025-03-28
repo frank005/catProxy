@@ -11,6 +11,10 @@ let isAinsEnabled = false;
 let startTime;
 let statsInterval;
 
+//Agora net-quality stats
+var clientNetQuality = {uplink: 0, downlink: 0};
+var clientNetQuality2 = {uplink: 0, downlink: 0};
+
 // Add new variables for virtual background
 let lastVirtualBgCost = 0;
 let settingsToggleBtn;
@@ -192,7 +196,6 @@ const regions = [
     { label: "Hong Kong & Macau", value: "HKMC" },
     { label: "India", value: "INDIA" },
     { label: "Japan", value: "JAPAN" },
-    { label: "Korea", value: "KOREA" },
     { label: "North America", value: "NORTH_AMERICA" },
     { label: "Oceania", value: "OCEANIA" },
     { label: "Oversea", value: "OVERSEA" },
@@ -227,6 +230,8 @@ async function initializeAgoraClient() {
         sampleRate: 48000,
     });
 
+    AgoraRTC.setParameter("EXPERIMENTS", {"netqSensitivityMode": 1});
+
     client = AgoraRTC.createClient({ mode: "live", codec: "vp9" });
     client2 = AgoraRTC.createClient({ mode: "live", codec: "vp9" });
 
@@ -238,6 +243,48 @@ async function initializeAgoraClient() {
 
 // Set up event handlers
 function setupEventHandlers() {
+    // Network quality handlers
+    client.on("network-quality", (stats) => {
+        //console.log("Network quality changed:", stats);
+        clientNetQuality.uplink = stats.uplinkNetworkQuality;
+        clientNetQuality.downlink = stats.downlinkNetworkQuality;
+    });
+
+    client2.on("network-quality", (stats) => {
+        //console.log("Client2 network quality changed:", stats);
+        clientNetQuality2.uplink = stats.uplinkNetworkQuality;
+        clientNetQuality2.downlink = stats.downlinkNetworkQuality;
+    });
+
+    // Connection state handlers
+    client.on("connection-state-change", (state, reason) => {
+        console.log("Connection state changed:", state, reason);
+        showPopup(`Connection state changed to: ${state}`);
+    });
+
+    client2.on("connection-state-change", (state, reason) => {
+        console.log("Client2 connection state changed:", state, reason);
+        showPopup(`Client2 connection state changed to: ${state}`);
+    });
+
+    // Cloud proxy handlers
+    client.on("is-using-cloud-proxy", (isUsing) => {
+        console.log("Using cloud proxy:", isUsing);
+        showPopup(`Cloud proxy ${isUsing ? "enabled" : "disabled"}`);
+    });
+
+    client.on("join-fallback-to-proxy", () => {
+        console.log("Falling back to proxy");
+        showPopup("Falling back to proxy");
+    });
+
+    // Stream type change handler
+    client2.on("stream-type-changed", (uid, streamType) => {
+        console.log("Stream type changed for user", uid, "to", streamType);
+        showPopup(`Stream type changed to ${streamType === 0 ? "high" : "low"} quality`);
+    });
+
+    // Existing user-published handlers
     client.on("user-published", async (user, mediaType) => {
         try {
             await client.subscribe(user, mediaType);
@@ -381,6 +428,12 @@ async function joinChannel() {
             return;
         }
 
+        // Reset all graphs at the start of a new call
+        if (networkData) networkData.removeRows(0, networkData.getNumberOfRows());
+        if (fpsData) fpsData.removeRows(0, fpsData.getNumberOfRows());
+        if (virtualBgCostData) virtualBgCostData.removeRows(0, virtualBgCostData.getNumberOfRows());
+        if (resolutionData) resolutionData.removeRows(0, resolutionData.getNumberOfRows());
+
         showPopup("Initializing Agora client...");
         await initializeAgoraClient();
         
@@ -523,24 +576,6 @@ async function leaveChannel() {
         }
         if (remoteStats) {
             remoteStats.innerHTML = '';
-        }
-        if (networkData) {
-            networkData.removeRows(0, networkData.getNumberOfRows());
-        }
-        if (fpsData) {
-            fpsData.removeRows(0, fpsData.getNumberOfRows());
-        }
-        if (networkChart) {
-            networkChart.draw(networkData, {
-                title: 'Network Quality',
-                vAxis: { title: 'Bitrate (Mbps)' }
-            });
-        }
-        if (fpsChart) {
-            fpsChart.draw(fpsData, {
-                title: 'Frame Rate',
-                vAxis: { title: 'FPS' }
-            });
         }
 
         // Reset overall stats
@@ -700,8 +735,8 @@ function showPopup(message) {
     }, 5000); // Increased from 3000 to 5000ms
 }
 
-// Add event listener for virtual background type change
-virtualBgTypeSelect.addEventListener('change', () => {
+// Add event listeners for virtual background controls
+virtualBgTypeSelect.addEventListener('change', async () => {
     // Hide all groups first
     virtualBgColorGroup.style.display = 'none';
     virtualBgImgGroup.style.display = 'none';
@@ -723,18 +758,40 @@ virtualBgTypeSelect.addEventListener('change', () => {
             virtualBgBlurGroup.style.display = 'flex';
             break;
     }
+
+    // If virtual background is enabled, update it with new type
+    if (isVirtualBackgroundEnabled) {
+        await updateVirtualBackground();
+    }
 });
 
-// Add event listener for color picker
-virtualBgColorInput.addEventListener('input', (e) => {
+// Add event listeners for virtual background controls
+virtualBgColorInput.addEventListener('input', async (e) => {
     colorValueDisplay.textContent = e.target.value;
+    if (isVirtualBackgroundEnabled) {
+        await updateVirtualBackground();
+    }
 });
 
-// Add event listener for blur slider
-virtualBgBlurSelect.addEventListener('input', (e) => {
+virtualBgImgUrlInput.addEventListener('input', async () => {
+    if (isVirtualBackgroundEnabled) {
+        await updateVirtualBackground();
+    }
+});
+
+virtualBgVideoUrlInput.addEventListener('input', async () => {
+    if (isVirtualBackgroundEnabled) {
+        await updateVirtualBackground();
+    }
+});
+
+virtualBgBlurSelect.addEventListener('input', async (e) => {
     const value = parseInt(e.target.value);
     const blurValue = document.getElementById('blurValue');
     blurValue.textContent = value === 1 ? 'Low' : value === 2 ? 'Medium' : 'High';
+    if (isVirtualBackgroundEnabled) {
+        await updateVirtualBackground();
+    }
 });
 
 // Helper function to load media with CORS handling
@@ -1026,7 +1083,7 @@ function updateStats(clientStats, clientStats2, localVideoStats, remoteVideoStat
         `Send Jitter: ${Number(localVideoStats.sendJitterMs).toFixed(2)}ms`,
         `Send RTT: ${Number(localVideoStats.sendRttMs).toFixed(2)}ms`,
         `Packet Loss: ${Number(localVideoStats.currentPacketLossRate).toFixed(3)}%`,
-        `Network Quality: ${clientStats.uplinkNetworkQuality}`
+        `Network Quality: ${clientNetQuality.uplink}`
     ].join('<br>');
 
     if (remoteVideoStats) {
@@ -1042,7 +1099,7 @@ function updateStats(clientStats, clientStats2, localVideoStats, remoteVideoStat
             `Transport Delay: ${remoteVideoStats.transportDelay}ms`,
             `Freeze Rate: ${Number(remoteVideoStats.freezeRate).toFixed(3)}%`,
             `Total freeze time: ${remoteVideoStats.totalFreezeTime}s`,
-            `Network Quality: ${clientStats.downlinkNetworkQuality}`
+            `Network Quality: ${clientNetQuality2.downlink}`
         ].join('<br>');
     }
 
@@ -1139,47 +1196,58 @@ function toggleSettings() {
 // Initialize everything after DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     // Set default cat background for video containers
-    localVideo.innerHTML = '<div class="no-video"></div>';
-    remoteVideo.innerHTML = '<div class="no-video"></div>';
+    if (localVideo) localVideo.innerHTML = '<div class="no-video"></div>';
+    if (remoteVideo) remoteVideo.innerHTML = '<div class="no-video"></div>';
 
     // Initialize Google Charts
     google.charts.load('current', {'packages':['corechart']});
     google.charts.setOnLoadCallback(initializeCharts);
 
     // Populate video profiles
-    videoProfileSelect.innerHTML = videoProfiles.map(profile => 
-        `<option value="${profile.value}" title="${profile.detail}" ${profile.value === "720p_3" ? "selected" : ""}>${profile.label}</option>`
-    ).join('');
+    if (videoProfileSelect) {
+        videoProfileSelect.innerHTML = videoProfiles.map(profile => 
+            `<option value="${profile.value}" title="${profile.detail}" ${profile.value === "720p_3" ? "selected" : ""}>${profile.label}</option>`
+        ).join('');
+    }
 
     // Populate regions
-    geoFenceSelect.innerHTML = regions.map(region => 
-        `<option value="${region.value}">${region.label}</option>`
-    ).join('');
+    if (geoFenceSelect) {
+        geoFenceSelect.innerHTML = regions.map(region => 
+            `<option value="${region.value}">${region.label}</option>`
+        ).join('');
+    }
 
     // Populate proxy modes
-    cloudProxySelect.innerHTML = proxyModes.map(mode => 
-        `<option value="${mode.value}" title="${mode.detail}">${mode.label}</option>`
-    ).join('');
+    if (cloudProxySelect) {
+        cloudProxySelect.innerHTML = proxyModes.map(mode => 
+            `<option value="${mode.value}" title="${mode.detail}">${mode.label}</option>`
+        ).join('');
+    }
 
     // Get devices
     getDevices();
 
     // Add event listeners
-    joinBtn.addEventListener('click', joinChannel);
-    leaveBtn.addEventListener('click', leaveChannel);
-    muteMicBtn.addEventListener('click', toggleMicrophone);
-    muteCameraBtn.addEventListener('click', toggleCamera);
-    dualStreamBtn.addEventListener('click', toggleDualStream);
-    switchStreamBtn.addEventListener('click', switchStream);
-    virtualBgBtn.addEventListener('click', toggleVirtualBackground);
-    ainsBtn.addEventListener('click', toggleAins);
+    if (joinBtn) joinBtn.addEventListener('click', joinChannel);
+    if (leaveBtn) leaveBtn.addEventListener('click', leaveChannel);
+    if (muteMicBtn) muteMicBtn.addEventListener('click', toggleMicrophone);
+    if (muteCameraBtn) muteCameraBtn.addEventListener('click', toggleCamera);
+    if (dualStreamBtn) dualStreamBtn.addEventListener('click', toggleDualStream);
+    if (switchStreamBtn) switchStreamBtn.addEventListener('click', switchStream);
+    if (virtualBgBtn) virtualBgBtn.addEventListener('click', toggleVirtualBackground);
+    if (ainsBtn) ainsBtn.addEventListener('click', toggleAins);
 
     // Set initial button states
-    leaveBtn.disabled = true;
-    leaveBtn.style.opacity = '0.5';
+    if (leaveBtn) {
+        leaveBtn.disabled = true;
+        leaveBtn.style.opacity = '0.5';
+    }
+    
     [muteMicBtn, muteCameraBtn, dualStreamBtn, switchStreamBtn, virtualBgBtn, ainsBtn].forEach(btn => {
-        btn.disabled = true;
-        btn.style.opacity = '0.5';
+        if (btn) {
+            btn.disabled = true;
+            btn.style.opacity = '0.5';
+        }
     });
 
     // Handle window resize for charts
@@ -1219,4 +1287,115 @@ document.addEventListener('DOMContentLoaded', () => {
             showPopup("Failed to update video profile");
         }
     });
-}); 
+
+    // Add event listeners for virtual background controls
+    virtualBgTypeSelect.addEventListener('change', async () => {
+        // Hide all groups first
+        virtualBgColorGroup.style.display = 'none';
+        virtualBgImgGroup.style.display = 'none';
+        virtualBgVideoGroup.style.display = 'none';
+        virtualBgBlurGroup.style.display = 'none';
+
+        // Show relevant group based on selection
+        switch (virtualBgTypeSelect.value) {
+            case 'color':
+                virtualBgColorGroup.style.display = 'flex';
+                break;
+            case 'img':
+                virtualBgImgGroup.style.display = 'flex';
+                break;
+            case 'video':
+                virtualBgVideoGroup.style.display = 'flex';
+                break;
+            case 'blur':
+                virtualBgBlurGroup.style.display = 'flex';
+                break;
+        }
+
+        // If virtual background is enabled, update it with new type
+        if (isVirtualBackgroundEnabled) {
+            await updateVirtualBackground();
+        }
+    });
+
+    // Add event listeners for virtual background controls
+    virtualBgColorInput.addEventListener('input', async (e) => {
+        colorValueDisplay.textContent = e.target.value;
+        if (isVirtualBackgroundEnabled) {
+            await updateVirtualBackground();
+        }
+    });
+
+    virtualBgImgUrlInput.addEventListener('input', async () => {
+        if (isVirtualBackgroundEnabled) {
+            await updateVirtualBackground();
+        }
+    });
+
+    virtualBgVideoUrlInput.addEventListener('input', async () => {
+        if (isVirtualBackgroundEnabled) {
+            await updateVirtualBackground();
+        }
+    });
+
+    virtualBgBlurSelect.addEventListener('input', async (e) => {
+        const value = parseInt(e.target.value);
+        const blurValue = document.getElementById('blurValue');
+        blurValue.textContent = value === 1 ? 'Low' : value === 2 ? 'Medium' : 'High';
+        if (isVirtualBackgroundEnabled) {
+            await updateVirtualBackground();
+        }
+    });
+});
+
+// Add new function to update virtual background
+async function updateVirtualBackground() {
+    if (!localVideoTrack || !isVirtualBackgroundEnabled) return;
+
+    try {
+        // Get the current processor
+        const processor = localVideoTrack.processor;
+        if (!processor) return;
+
+        // Set options based on selected type
+        const options = {
+            type: virtualBgTypeSelect.value,
+            fit: 'cover'
+        };
+
+        switch (virtualBgTypeSelect.value) {
+            case 'color':
+                options.color = virtualBgColorInput.value;
+                break;
+            case 'img':
+                try {
+                    options.source = await loadMediaWithCORS(virtualBgImgUrlInput.value, 'img');
+                } catch (error) {
+                    showPopup(error.message);
+                    return;
+                }
+                break;
+            case 'video':
+                try {
+                    options.source = await loadMediaWithCORS(virtualBgVideoUrlInput.value, 'video');
+                } catch (error) {
+                    showPopup(error.message);
+                    return;
+                }
+                break;
+            case 'blur':
+                options.blurDegree = parseInt(virtualBgBlurSelect.value);
+                break;
+            case 'none':
+                // No additional options needed
+                break;
+        }
+
+        // Update the processor options
+        processor.setOptions(options);
+        showPopup("Virtual background updated");
+    } catch (error) {
+        console.error("Error updating virtual background:", error);
+        showPopup("Failed to update virtual background");
+    }
+} 
