@@ -533,12 +533,16 @@ async function joinChannel() {
             await client.enableDualStream();
             isDualStreamEnabled = true;
             dualStreamBtn.textContent = "Disable Dual Stream";
+            switchStreamBtn.textContent = "Set to Low Quality";
         } else {
             showPopup("Dual stream disabled because SVC is enabled");
             isDualStreamEnabled = false;
             dualStreamBtn.textContent = "Enable Dual Stream";
             dualStreamBtn.disabled = true;
             dualStreamBtn.style.opacity = '0.5';
+            switchStreamBtn.textContent = "Set to High Quality";
+            switchStreamBtn.disabled = true;
+            switchStreamBtn.style.opacity = '0.5';
         }
 
         // Join channel as host
@@ -1057,7 +1061,7 @@ async function toggleAins() {
             
             // Create and register AINS extension
             const denoiser = new AIDenoiser.AIDenoiserExtension({
-                assetsPath: './aiDenoiserExtension/external'
+                assetsPath: 'https://agora-packages.s3.us-west-2.amazonaws.com/ext/aidenoiser/external'
             });
             AgoraRTC.registerExtensions([denoiser]);
             
