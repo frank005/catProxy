@@ -434,17 +434,17 @@ async function getDevices() {
 async function createLocalTracks() {
     try {
         // Create audio track with selected profile
-        const audioProfile = audioProfileSelect.value;
+        /*const audioProfile = audioProfileSelect.value;
         localVideoTrack = await AgoraRTC.createCameraVideoTrack({
             encoderConfig: videoProfileSelect.value,
             deviceId: cameraSelect.value,
-            scalabilityMode: isSVCEnabled ? "3SL3TL" : undefined
+            scalabiltyMode: isSVCEnabled ? "3SL3TL" : undefined
         });
         localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack({
             encoderConfig: audioProfile,
             deviceId: micSelect.value
-        });
-        /*[localAudioTrack, localVideoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
+        });*/
+        [localAudioTrack, localVideoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
             {
                 encoderConfig: audioProfile,
                 deviceId: micSelect.value
@@ -452,9 +452,9 @@ async function createLocalTracks() {
             {
                 encoderConfig: videoProfileSelect.value,
                 deviceId: cameraSelect.value,
-                scalabilityMode: isSVCEnabled ? "3SL3TL" : undefined
+                scalabiltyMode: isSVCEnabled ? "3SL3TL" : undefined
             }
-        );*/
+        );
 
         // Play local video track
         localVideo.innerHTML = ''; // Clear no-video div

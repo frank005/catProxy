@@ -602,6 +602,18 @@ body::before {
     transition: opacity 0.3s;
 }
 
+.input-group.svc-checkbox-wrapper {
+    flex-direction: column;
+    align-items: left;
+    gap: 6px;
+    color: #4b2e83;
+  }
+  
+  .svc-checkbox-wrapper input[type="checkbox"] {
+    width: 13px;
+    height: 13px;
+  }
+
 #enableSVC {
     margin-right: 8px;
     transform: scale(1.2);

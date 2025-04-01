@@ -180,12 +180,14 @@
     <div class="svc-popup-overlay"></div>
     <div class="svc-popup">
         <h3>SVC Settings</h3>
-        <div class="svc-popup-content">
-            <div class="input-group">
+        <div class="svc-popup-content ">
+            <div class="input-group svc-checkbox-wrapper">
                 <label for="enableSVC">
-                    <input type="checkbox" id="enableSVC"> Enable SVC (VP9 Scalable Video Coding)
+                    <input type="checkbox" id="enableSVC" >Enable SVC (VP9 Scalable Video Coding)
                 </label>
-                <small>Enable before joining call for best results</small>
+                <div class="checkbox-label-text">
+                    <small>Enable before joining call or it won't work!</small>
+                </div>
             </div>
             <div id="svcControls" style="display: none;">
                 <div class="svc-option">
