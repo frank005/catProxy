@@ -19,6 +19,48 @@ var clientNetQuality2 = {uplink: 0, downlink: 0};
 let lastVirtualBgCost = 0;
 let settingsToggleBtn;
 
+// Add audio profiles configuration
+const audioProfiles = [{
+    label: "speech_low_quality",
+    detail: "16 Khz, mono, 24Kbps",
+    value: "speech_low_quality"
+}, {
+    label: "speech_standard",
+    detail: "32 Khz, mono, 24Kbps",
+    value: "speech_standard"
+}, {
+    label: "music_standard",
+    detail: "48 Khz, mono, 40 Kbps",
+    value: "music_standard"
+}, {
+    label: "standard_stereo",
+    detail: "48 Khz, stereo, 64 Kbps",
+    value: "standard_stereo"
+}, {
+    label: "high_quality",
+    detail: "48 Khz, mono, 129 Kbps",
+    value: "high_quality"
+}, {
+    label: "high_quality_stereo",
+    detail: "48 Khz, stereo, 192 Kbps",
+    value: "high_quality_stereo"
+}, {
+    label: "320_high",
+    detail: "48 Khz, stereo, 320 Kbps",
+    value: {
+        bitrate: 320,
+        sampleRate: 48000,
+        sampleSize: 16,
+        stereo: true
+    }
+}];
+
+// Add SVC variables
+let isSVCEnabled = false;
+let currentSpatialLayer = 3;
+let currentTemporalLayer = 3;
+let layers = {}; // Add layers object to track per-uid settings
+
 // DOM Elements
 const appIdInput = document.getElementById('appId');
 const tokenInput = document.getElementById('token');
@@ -67,6 +109,13 @@ let networkChart;
 let fpsChart;
 let networkData;
 let fpsData;
+
+// Add new DOM elements
+const audioProfileSelect = document.getElementById('audioProfile');
+const svcControls = document.getElementById('svcControls');
+const spatialLayerInput = document.getElementById('spatialLayer');
+const temporalLayerInput = document.getElementById('temporalLayer');
+const applySVCBtn = document.getElementById('applySVCBtn');
 
 // Define chart options globally
 const chartOptions = {
@@ -222,6 +271,17 @@ const proxyModes = [
     }
 ];
 
+// Add new variables for SVC popup
+const svcPopup = document.querySelector('.svc-popup');
+const svcOverlay = document.querySelector('.svc-popup-overlay');
+const svcSaveBtn = document.querySelector('.svc-popup-footer .save');
+const svcCancelBtn = document.querySelector('.svc-popup-footer .cancel');
+const enableSVCCheckbox = document.getElementById('enableSVC');
+
+// Add click counter for logo
+let logoClickCount = 0;
+let logoClickTimeout;
+
 // Initialize Agora client
 async function initializeAgoraClient() {
     // Set WebAudio initialization options
@@ -373,16 +433,28 @@ async function getDevices() {
 // Create local tracks
 async function createLocalTracks() {
     try {
-        [localAudioTrack, localVideoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
+        // Create audio track with selected profile
+        const audioProfile = audioProfileSelect.value;
+        localVideoTrack = await AgoraRTC.createCameraVideoTrack({
+            encoderConfig: videoProfileSelect.value,
+            deviceId: cameraSelect.value,
+            scalabilityMode: isSVCEnabled ? "3SL3TL" : undefined
+        });
+        localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack({
+            encoderConfig: audioProfile,
+            deviceId: micSelect.value
+        });
+        /*[localAudioTrack, localVideoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
             {
-                encoderConfig: "high_quality",
+                encoderConfig: audioProfile,
                 deviceId: micSelect.value
             },
             {
                 encoderConfig: videoProfileSelect.value,
-                deviceId: cameraSelect.value
+                deviceId: cameraSelect.value,
+                scalabilityMode: isSVCEnabled ? "3SL3TL" : undefined
             }
-        );
+        );*/
 
         // Play local video track
         localVideo.innerHTML = ''; // Clear no-video div
@@ -393,7 +465,7 @@ async function createLocalTracks() {
     }
 }
 
-// Create local video track
+/* Create local video track
 async function createLocalVideoTrack() {
     try {
         const selectedProfile = videoProfileSelect.value || "720p_3"; // Default to 720p_3 if none selected
@@ -414,6 +486,7 @@ async function createLocalVideoTrack() {
         throw error;
     }
 }
+*/
 
 // Join channel
 async function joinChannel() {
@@ -454,11 +527,19 @@ async function joinChannel() {
             await client2.startProxyServer(proxyMode);
         }
 
-        // Enable dual stream mode before joining
-        showPopup("Enabling dual stream mode...");
-        await client.enableDualStream();
-        isDualStreamEnabled = true;
-        dualStreamBtn.textContent = "Disable Dual Stream";
+        // Enable dual stream mode before joining only if SVC is not enabled
+        if (!isSVCEnabled) {
+            showPopup("Enabling dual stream mode...");
+            await client.enableDualStream();
+            isDualStreamEnabled = true;
+            dualStreamBtn.textContent = "Disable Dual Stream";
+        } else {
+            showPopup("Dual stream disabled because SVC is enabled");
+            isDualStreamEnabled = false;
+            dualStreamBtn.textContent = "Enable Dual Stream";
+            dualStreamBtn.disabled = true;
+            dualStreamBtn.style.opacity = '0.5';
+        }
 
         // Join channel as host
         showPopup(`Joining channel ${channelName} as host...`);
@@ -479,7 +560,7 @@ async function joinChannel() {
         leaveBtn.style.opacity = '1';
 
         // Enable control buttons
-        [muteMicBtn, muteCameraBtn, dualStreamBtn, switchStreamBtn, virtualBgBtn, ainsBtn].forEach(btn => {
+        [muteMicBtn, muteCameraBtn, switchStreamBtn, virtualBgBtn, ainsBtn].forEach(btn => {
             btn.disabled = false;
             btn.style.opacity = '1';
             btn.style.background = '#fff3cd';
@@ -492,7 +573,6 @@ async function joinChannel() {
             showPopup("Audio muted by default");
         }
 
-        //updateInviteLink();
         showPopup("Successfully joined channel!");
     } catch (error) {
         console.error("Error joining channel:", error);
@@ -664,6 +744,12 @@ async function toggleCamera() {
 // Toggle dual stream
 async function toggleDualStream() {
     if (!client) return;
+
+    // Prevent toggling if SVC is enabled
+    if (isSVCEnabled) {
+        showPopup("Cannot enable dual stream while SVC is enabled");
+        return;
+    }
 
     try {
         if (!isDualStreamEnabled) {
@@ -1236,6 +1322,13 @@ document.addEventListener('DOMContentLoaded', () => {
         ).join('');
     }
 
+    // Populate audio profiles
+    if (audioProfileSelect) {
+        audioProfileSelect.innerHTML = audioProfiles.map(profile => 
+            `<option value='${typeof profile.value === 'string' ? profile.value : JSON.stringify(profile.value)}' title="${profile.detail}">${profile.label}</option>`
+        ).join('');
+    }
+
     // Get devices
     getDevices();
 
@@ -1358,56 +1451,139 @@ document.addEventListener('DOMContentLoaded', () => {
             await updateVirtualBackground();
         }
     });
+
+    // Update logo click handler
+    const logo = document.querySelector('.logo');
+    logo.style.cursor = 'pointer';
+    
+    logo.addEventListener('click', () => {
+        // Increment click count
+        logoClickCount++;
+        
+        // Clear existing timeout
+        if (logoClickTimeout) {
+            clearTimeout(logoClickTimeout);
+        }
+        
+        // Set new timeout to reset counter
+        logoClickTimeout = setTimeout(() => {
+            logoClickCount = 0;
+        }, 3000);
+        
+        // Check if we've reached 3 clicks
+        if (logoClickCount === 3) {
+            // Show SVC popup
+            svcPopup.classList.add('show');
+            svcOverlay.classList.add('show');
+            showPopup("🎮 You found the secret SVC controls!");
+        }
+    });
+
+    // Add SVC popup event listeners
+    svcSaveBtn.addEventListener('click', () => {
+        saveSVCSettings();
+        closeSVCPopup();
+    });
+
+    svcCancelBtn.addEventListener('click', closeSVCPopup);
+    svcOverlay.addEventListener('click', closeSVCPopup);
+
+    // Add enable SVC checkbox handler
+    enableSVCCheckbox.addEventListener('change', (e) => {
+        const svcControls = document.getElementById('svcControls');
+        svcControls.style.display = e.target.checked ? 'block' : 'none';
+        isSVCEnabled = e.target.checked;
+        
+        if (e.target.checked) {
+            showPopup("🎮 SVC enabled! Make sure to save before joining the call.");
+        } else {
+            showPopup("SVC disabled");
+        }
+    });
+
+    // Add event listeners for SVC sliders
+    document.getElementById('spatialLayer').addEventListener('input', (e) => {
+        document.getElementById('spatialValue').textContent = e.target.value;
+    });
+
+    document.getElementById('temporalLayer').addEventListener('input', (e) => {
+        document.getElementById('temporalValue').textContent = e.target.value;
+    });
+
+    // Add event listener for apply button
+    document.getElementById('applySVCBtn').addEventListener('click', updateSVCLayers);
 });
 
-// Add new function to update virtual background
-async function updateVirtualBackground() {
-    if (!localVideoTrack || !isVirtualBackgroundEnabled) return;
+// Add function to close SVC popup
+function closeSVCPopup() {
+    svcPopup.classList.remove('show');
+    svcOverlay.classList.remove('show');
+}
+
+// Add function to save SVC settings
+function saveSVCSettings() {
+    isSVCEnabled = enableSVCCheckbox.checked;
+    if (isSVCEnabled) {
+        currentSpatialLayer = parseInt(document.getElementById('spatialLayer').value);
+        currentTemporalLayer = parseInt(document.getElementById('temporalLayer').value);
+        
+        // Set SVC parameters immediately
+        AgoraRTC.setParameter("SVC",["vp9"]);
+        AgoraRTC.setParameter("ENABLE_AUT_CC",true);
+        
+        // Store settings for the current user
+        if (client && client.uid) {
+            layers[client.uid] = {
+                spatialLayer: currentSpatialLayer,
+                temporalLayer: currentTemporalLayer
+            };
+        }
+        
+        showPopup(`SVC settings saved! Spatial: ${currentSpatialLayer}, Temporal: ${currentTemporalLayer}`);
+    } else {
+        showPopup("SVC disabled");
+    }
+}
+
+// Add function to update SVC layers
+async function updateSVCLayers() {
+    if (!client2 || !client2.remoteUsers.length || !isSVCEnabled) {
+        showPopup("Cannot update SVC layers - no remote user or SVC not enabled");
+        return;
+    }
+
+    const remoteUser = client2.remoteUsers.find(user => user.uid === client.uid);
+    if (!remoteUser) {
+        showPopup("Remote user not found");
+        return;
+    }
 
     try {
-        // Get the current processor
-        const processor = localVideoTrack.processor;
-        if (!processor) return;
+        const spatialLayer = parseInt(document.getElementById('spatialLayer').value);
+        const temporalLayer = parseInt(document.getElementById('temporalLayer').value);
 
-        // Set options based on selected type
-        const options = {
-            type: virtualBgTypeSelect.value,
-            fit: 'cover'
+        // Update layers object
+        layers[remoteUser.uid] = {
+            spatialLayer: spatialLayer,
+            temporalLayer: temporalLayer
         };
 
-        switch (virtualBgTypeSelect.value) {
-            case 'color':
-                options.color = virtualBgColorInput.value;
-                break;
-            case 'img':
-                try {
-                    options.source = await loadMediaWithCORS(virtualBgImgUrlInput.value, 'img');
-                } catch (error) {
-                    showPopup(error.message);
-                    return;
-                }
-                break;
-            case 'video':
-                try {
-                    options.source = await loadMediaWithCORS(virtualBgVideoUrlInput.value, 'video');
-                } catch (error) {
-                    showPopup(error.message);
-                    return;
-                }
-                break;
-            case 'blur':
-                options.blurDegree = parseInt(virtualBgBlurSelect.value);
-                break;
-            case 'none':
-                // No additional options needed
-                break;
-        }
+        // Apply the new layers
+        await client2.pickSVCLayer(remoteUser.uid, {
+            spatialLayer: spatialLayer,
+            temporalLayer: temporalLayer
+        });
 
-        // Update the processor options
-        processor.setOptions(options);
-        showPopup("Virtual background updated");
+        currentSpatialLayer = spatialLayer;
+        currentTemporalLayer = temporalLayer;
+        showPopup(`Updated SVC layers - Spatial: ${spatialLayer}, Temporal: ${temporalLayer}`);
     } catch (error) {
-        console.error("Error updating virtual background:", error);
-        showPopup("Failed to update virtual background");
+        console.error("Error updating SVC layers:", error);
+        showPopup("Failed to update SVC layers");
     }
+}
+
+// Add toggle for SVC controls
+function toggleSVCControls() {
+    svcControls.style.display = svcControls.style.display === 'none' ? 'block' : 'none';
 } 

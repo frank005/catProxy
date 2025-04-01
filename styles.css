@@ -51,11 +51,26 @@ header {
     display: flex;
     align-items: center;
     gap: 10px;
+    transition: transform 0.3s ease;
+}
+
+.logo:hover {
+    transform: scale(1.05);
+}
+
+.logo:active {
+    transform: scale(0.95);
 }
 
 .logo img {
     height: 30px;
     border-radius: 50%;
+    transition: all 0.3s ease;
+}
+
+.logo img:hover {
+    box-shadow: 0 0 15px rgba(75, 46, 131, 0.5);
+    transform: rotate(360deg);
 }
 
 .controls {
@@ -498,4 +513,207 @@ body::before {
     background: #6b4ea3;
     transform: translateY(-1px);
     box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+.svc-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+    background: #f8f9fa;
+    border-radius: 5px;
+}
+
+.svc-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+}
+
+.svc-option label {
+    min-width: 60px;
+    margin: 0;
+    font-size: 14px;
+}
+
+.svc-option .slider-container {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0; /* Allow container to shrink */
+}
+
+.svc-option input[type="range"] {
+    flex: 1;
+    height: 4px;
+    -webkit-appearance: none;
+    background: #ddd;
+    border-radius: 2px;
+    outline: none;
+    min-width: 100px; /* Minimum width for the slider */
+}
+
+.svc-option input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    background: #4b2e83;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background .15s ease-in-out;
+}
+
+.svc-option input[type="range"]::-webkit-slider-thumb:hover {
+    background: #6b3fa3;
+}
+
+.svc-option span {
+    min-width: 20px;
+    font-size: 14px;
+    color: #4b2e83;
+    text-align: right;
+}
+
+#applySVCBtn {
+    margin-top: 8px;
+    background: #4b2e83;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 14px;
+    width: 100%;
+}
+
+#applySVCBtn:hover {
+    background: #6b4ea3;
+}
+
+#svcToggleBtn {
+    background: #fff3cd;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: opacity 0.3s;
+}
+
+#enableSVC {
+    margin-right: 8px;
+    transform: scale(1.2);
+    cursor: pointer;
+}
+
+#enableSVC:checked + span {
+    color: #4b2e83;
+    font-weight: bold;
+}
+
+/* Add a fun animation for the SVC controls appearance */
+.input-group[style*="display: block"] {
+    animation: popIn 0.3s ease-out;
+}
+
+@keyframes popIn {
+    0% {
+        transform: scale(0);
+        opacity: 0;
+    }
+    70% {
+        transform: scale(1.1);
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.svc-popup {
+    display: none;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    z-index: 1002;
+    width: 90%;
+    max-width: 400px;
+}
+
+.svc-popup.show {
+    display: block;
+    animation: popIn 0.3s ease-out;
+}
+
+.svc-popup h3 {
+    color: #4b2e83;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.svc-popup h3::before {
+    content: "🎮";
+}
+
+.svc-popup-content {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.svc-popup-footer {
+    margin-top: 20px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.svc-popup-footer button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.svc-popup-footer button.save {
+    background: #4b2e83;
+    color: white;
+}
+
+.svc-popup-footer button.save:hover {
+    background: #6b4ea3;
+}
+
+.svc-popup-footer button.cancel {
+    background: #e9ecef;
+    color: #4b2e83;
+}
+
+.svc-popup-footer button.cancel:hover {
+    background: #dee2e6;
+}
+
+.svc-popup-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1001;
+}
+
+.svc-popup-overlay.show {
+    display: block;
 } 
