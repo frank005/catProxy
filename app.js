@@ -1329,7 +1329,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Populate audio profiles
     if (audioProfileSelect) {
         audioProfileSelect.innerHTML = audioProfiles.map(profile => 
-            `<option value='${typeof profile.value === 'string' ? profile.value : JSON.stringify(profile.value)}' title="${profile.detail}">${profile.label}</option>`
+            `<option value='${typeof profile.value === 'string' ? profile.value : JSON.stringify(profile.value)}' title="${profile.detail}" ${profile.value === "speech_standard" ? "selected" : ""}>${profile.label}</option>`
         ).join('');
     }
 
