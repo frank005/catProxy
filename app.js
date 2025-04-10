@@ -534,6 +534,10 @@ async function joinChannel() {
             isDualStreamEnabled = true;
             dualStreamBtn.textContent = "Disable Dual Stream";
             switchStreamBtn.textContent = "Set to Low Quality";
+            dualStreamBtn.disabled = false;
+            dualStreamBtn.style.opacity = '1';
+            switchStreamBtn.disabled = false;
+            switchStreamBtn.style.opacity = '1';
         } else {
             showPopup("Dual stream disabled because SVC is enabled");
             isDualStreamEnabled = false;
