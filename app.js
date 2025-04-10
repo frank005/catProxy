@@ -930,6 +930,58 @@ async function loadMediaWithCORS(url, type) {
     }
 }
 
+// Add new function to update virtual background
+async function updateVirtualBackground() {
+    if (!localVideoTrack || !isVirtualBackgroundEnabled) return;
+
+    try {
+        // Get the current processor
+        const processor = localVideoTrack.processor;
+        if (!processor) return;
+
+        // Set options based on selected type
+        const options = {
+            type: virtualBgTypeSelect.value,
+            fit: 'cover'
+        };
+
+        switch (virtualBgTypeSelect.value) {
+            case 'color':
+                options.color = virtualBgColorInput.value;
+                break;
+            case 'img':
+                try {
+                    options.source = await loadMediaWithCORS(virtualBgImgUrlInput.value, 'img');
+                } catch (error) {
+                    showPopup(error.message);
+                    return;
+                }
+                break;
+            case 'video':
+                try {
+                    options.source = await loadMediaWithCORS(virtualBgVideoUrlInput.value, 'video');
+                } catch (error) {
+                    showPopup(error.message);
+                    return;
+                }
+                break;
+            case 'blur':
+                options.blurDegree = parseInt(virtualBgBlurSelect.value);
+                break;
+            case 'none':
+                // No additional options needed
+                break;
+        }
+
+        // Update the processor options
+        processor.setOptions(options);
+        showPopup("Virtual background updated");
+    } catch (error) {
+        console.error("Error updating virtual background:", error);
+        showPopup("Failed to update virtual background");
+    }
+}
+
 // Toggle virtual background
 async function toggleVirtualBackground() {
     if (!localVideoTrack) {
