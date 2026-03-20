@@ -79,6 +79,7 @@ const dualStreamBtn = document.getElementById('dualStreamBtn');
 const switchStreamBtn = document.getElementById('switchStreamBtn');
 const virtualBgBtn = document.getElementById('virtualBgBtn');
 const ainsBtn = document.getElementById('ainsBtn');
+const beautyBtn = document.getElementById('beautyBtn');
 const localVideo = document.getElementById('localVideo');
 const remoteVideo = document.getElementById('remoteVideo');
 const localStats = document.getElementById('localStats');
@@ -460,6 +461,9 @@ async function createLocalTracks() {
         // Play local video track
         localVideo.innerHTML = ''; // Clear no-video div
         localVideoTrack.play("localVideo");
+
+        // Expose for effect pipeline helpers (beauty.js).
+        window.localVideoTrack = localVideoTrack;
     } catch (error) {
         console.error("Error creating local tracks:", error);
         throw error;
@@ -569,7 +573,7 @@ async function joinChannel() {
         leaveBtn.style.opacity = '1';
 
         // Enable control buttons
-        [muteMicBtn, muteCameraBtn, switchStreamBtn, virtualBgBtn, ainsBtn].forEach(btn => {
+        [muteMicBtn, muteCameraBtn, switchStreamBtn, virtualBgBtn, ainsBtn, beautyBtn].forEach(btn => {
             btn.disabled = false;
             btn.style.opacity = '1';
             btn.style.background = '#fff3cd';
@@ -594,6 +598,15 @@ async function leaveChannel() {
     try {
         showPopup("Starting leave process...");
         
+        // Disable beauty effect (if enabled) before closing the track.
+        if (window.isBeautyEnabled && typeof window.toggleBeauty === 'function') {
+            try {
+                await window.toggleBeauty();
+            } catch (e) {
+                console.warn("Failed to disable beauty on leave:", e);
+            }
+        }
+
         // Remove processors before closing tracks
         if (localVideoTrack && isVirtualBackgroundEnabled) {
             showPopup("Removing virtual background processor...");
@@ -681,11 +694,16 @@ async function leaveChannel() {
 
         // Reset states
         isVirtualBackgroundEnabled = false;
+        window.isVirtualBackgroundEnabled = false;
         isDualStreamEnabled = false;
         isAinsEnabled = false;
         virtualBgBtn.textContent = "Enable Virtual Background";
         dualStreamBtn.textContent = "Enable Dual Stream";
         ainsBtn.textContent = "Enable AINS";
+        window.isBeautyEnabled = false;
+        if (beautyBtn) beautyBtn.textContent = "Enable Beauty";
+        const beautyControlsEl = document.getElementById('beautyControls');
+        if (beautyControlsEl) beautyControlsEl.style.display = 'none';
         muteMicBtn.textContent = "Mute Mic";
         muteCameraBtn.textContent = "Mute Camera";
         switchStreamBtn.textContent = "Set to Low Quality";
@@ -697,7 +715,7 @@ async function leaveChannel() {
         leaveBtn.style.opacity = '0.5';
 
         // Disable control buttons
-        [muteMicBtn, muteCameraBtn, dualStreamBtn, switchStreamBtn, virtualBgBtn, ainsBtn].forEach(btn => {
+        [muteMicBtn, muteCameraBtn, dualStreamBtn, switchStreamBtn, virtualBgBtn, ainsBtn, beautyBtn].forEach(btn => {
             btn.disabled = true;
             btn.style.opacity = '0.5';
             btn.style.background = '#fff3cd';
@@ -971,7 +989,9 @@ async function updateVirtualBackground() {
 
     try {
         // Get the current processor
-        const processor = localVideoTrack.processor;
+        // When Beauty + Virtual Background are both used, the VB processor may not be
+        // the one referenced by `localVideoTrack.processor`, so prefer our shared reference.
+        const processor = window.virtualBackgroundProcessor || localVideoTrack.processor;
         if (!processor) return;
 
         // Set options based on selected type
@@ -1096,41 +1116,52 @@ async function toggleVirtualBackground() {
 
             processor.setOptions(options);
             await processor.enable();
-            
-            // Always unpipe first to ensure clean state
-            try {
-                await localVideoTrack.unpipe();
-            } catch (error) {
-                console.log("No existing pipe to unpipe");
-            }
-            
-            // Pipe the processor to the destination
-            await localVideoTrack.pipe(processor).pipe(localVideoTrack.processorDestination);
-            
+
+            // Store for the shared effect pipeline (beauty.js).
+            window.virtualBackgroundProcessor = processor;
+
             isVirtualBackgroundEnabled = true;
+            window.isVirtualBackgroundEnabled = true;
             virtualBgBtn.textContent = "Disable Virtual Background";
+
+            // Let the pipeline helper wire processors (supports Beauty + VB together).
+            if (window.rebuildVideoPipeline) {
+                await window.rebuildVideoPipeline();
+            }
+
             showPopup("Virtual background enabled");
         } else {
             console.log("Disabling virtual background...");
             showPopup("Disabling virtual background...");
-            
-            // Get the processor from the track
-            const processor = localVideoTrack.processor;
-            if (processor) {
-                // First unpipe the processor
-                await localVideoTrack.unpipe();
-                // Then disable and release
-                await processor.unpipe();
-                await processor.disable();
-                await processor.release();
-                // Clear the processor reference
-                localVideoTrack.processor = null;
-            }
-            
+
+            // Prefer our shared reference (used by beauty.js pipeline).
+            const processor = window.virtualBackgroundProcessor || localVideoTrack.processor;
+
+            // Update state/UI before rebuilding pipeline.
             isVirtualBackgroundEnabled = false;
+            window.isVirtualBackgroundEnabled = false;
+
             // VB cost events may stop arriving; force the chart to fall back to 0.
             lastVirtualBgCost = 0;
             virtualBgBtn.textContent = "Enable Virtual Background";
+
+            // Clean up processors first to ensure a clean state.
+            if (window.cleanupProcessors) {
+                await window.cleanupProcessors();
+            }
+
+            // Disable + release the VB processor (cleanupProcessors disables/unpipes but doesn't release).
+            if (processor) {
+                await processor.disable();
+                await processor.release();
+                window.virtualBackgroundProcessor = null;
+            }
+
+            // Rebuild with remaining processors (e.g. Beauty-only chain).
+            if (window.rebuildVideoPipeline) {
+                await window.rebuildVideoPipeline();
+            }
+
             showPopup("Virtual background disabled");
         }
     } catch (error) {
@@ -1457,7 +1488,7 @@ document.addEventListener('DOMContentLoaded', () => {
         leaveBtn.style.opacity = '0.5';
     }
     
-    [muteMicBtn, muteCameraBtn, dualStreamBtn, switchStreamBtn, virtualBgBtn, ainsBtn].forEach(btn => {
+    [muteMicBtn, muteCameraBtn, dualStreamBtn, switchStreamBtn, virtualBgBtn, ainsBtn, beautyBtn].forEach(btn => {
         if (btn) {
             btn.disabled = true;
             btn.style.opacity = '0.5';
