@@ -1128,6 +1128,8 @@ async function toggleVirtualBackground() {
             }
             
             isVirtualBackgroundEnabled = false;
+            // VB cost events may stop arriving; force the chart to fall back to 0.
+            lastVirtualBgCost = 0;
             virtualBgBtn.textContent = "Enable Virtual Background";
             showPopup("Virtual background disabled");
         }
@@ -1363,7 +1365,7 @@ function updateStats(clientStats, clientStats2, localVideoStats, remoteVideoStat
     }
 
     // Update virtual background cost chart
-    virtualBgCostData.addRow([time, lastVirtualBgCost]);
+    virtualBgCostData.addRow([time, isVirtualBackgroundEnabled ? lastVirtualBgCost : 0]);
     if (virtualBgCostData.getNumberOfRows() > 60) {
         virtualBgCostData.removeRow(0);
     }
