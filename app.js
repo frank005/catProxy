@@ -284,6 +284,7 @@ let logoClickTimeout;
 
 // Initialize Agora client
 async function initializeAgoraClient() {
+    //AgoraRTC.setParameter("TURN_DOMAIN", "edge.sd-rtn.com");
     // Set WebAudio initialization options
     AgoraRTC.setParameter('WEBAUDIO_INIT_OPTIONS', {
         latencyHint: 0.03,
@@ -597,7 +598,8 @@ async function leaveChannel() {
         if (localVideoTrack && isVirtualBackgroundEnabled) {
             showPopup("Removing virtual background processor...");
             try {
-                await localVideoTrack.unpipe();
+                // Reuse the toggle logic to ensure we disable + release the processor.
+                await toggleVirtualBackground();
                 showPopup("Virtual background processor removed");
             } catch (error) {
                 console.error("Error removing virtual background processor:", error);
@@ -749,6 +751,78 @@ async function toggleCamera() {
     }
 }
 
+// Switch the local camera device (preserves virtual background if enabled).
+async function switchCamera() {
+    // Only allow switching while in a call.
+    if (!client || leaveBtn?.disabled) return;
+    if (!cameraSelect?.value) return;
+    if (!localVideoTrack) return;
+
+    const oldVideoTrack = localVideoTrack;
+    const shouldRestoreVirtualBackground = isVirtualBackgroundEnabled;
+
+    try {
+        showPopup("Switching camera...");
+
+        // Virtual background processors are tied to the track piping.
+        // Disable first so we cleanly unpipe + release.
+        if (shouldRestoreVirtualBackground) {
+            await toggleVirtualBackground(); // disable
+        }
+
+        // Stop showing the old track immediately.
+        if (localVideo) localVideo.innerHTML = '<div class="no-video"></div>';
+
+        // Replace the published video track.
+        // Guarded by the "only while in a call" check above, so failures here are edge cases.
+        try {
+            await client.unpublish(oldVideoTrack);
+        } catch (e) {
+            // If unpublish fails (edge cases), we still proceed with the replacement.
+            console.warn("Failed to unpublish old video track:", e);
+        }
+
+        // Release the old camera track.
+        try {
+            oldVideoTrack.close();
+        } catch (e) {
+            // Ignore close errors; we are replacing the track anyway.
+        }
+
+        // Create a new camera track using the currently selected camera device.
+        const newVideoTrack = await AgoraRTC.createCameraVideoTrack({
+            deviceId: cameraSelect.value,
+            encoderConfig: videoProfileSelect?.value,
+            scalabiltyMode: isSVCEnabled ? "3SL3TL" : undefined
+        });
+
+        localVideoTrack = newVideoTrack;
+        localVideoTrack.play("localVideo");
+
+        try {
+            await client.publish([localVideoTrack]);
+        } catch (e) {
+            console.warn("Failed to publish new video track:", e);
+            throw e;
+        }
+
+        // Re-enable virtual background on the new track (re-pipes processor).
+        if (shouldRestoreVirtualBackground) {
+            await toggleVirtualBackground(); // enable
+        }
+
+        showPopup("Camera switched");
+    } catch (error) {
+        console.error("Error switching camera:", error);
+        showPopup("Failed to switch camera");
+
+        // Best-effort recovery: restore the old track reference for further actions.
+        if (!localVideoTrack) {
+            localVideoTrack = oldVideoTrack;
+        }
+    }
+}
+
 // Toggle dual stream
 async function toggleDualStream() {
     if (!client) return;
@@ -840,65 +914,6 @@ function showPopup(message) {
         }, 300);
     }, 5000); // Increased from 3000 to 5000ms
 }
-
-// Add event listeners for virtual background controls
-virtualBgTypeSelect.addEventListener('change', async () => {
-    // Hide all groups first
-    virtualBgColorGroup.style.display = 'none';
-    virtualBgImgGroup.style.display = 'none';
-    virtualBgVideoGroup.style.display = 'none';
-    virtualBgBlurGroup.style.display = 'none';
-
-    // Show relevant group based on selection
-    switch (virtualBgTypeSelect.value) {
-        case 'color':
-            virtualBgColorGroup.style.display = 'flex';
-            break;
-        case 'img':
-            virtualBgImgGroup.style.display = 'flex';
-            break;
-        case 'video':
-            virtualBgVideoGroup.style.display = 'flex';
-            break;
-        case 'blur':
-            virtualBgBlurGroup.style.display = 'flex';
-            break;
-    }
-
-    // If virtual background is enabled, update it with new type
-    if (isVirtualBackgroundEnabled) {
-        await updateVirtualBackground();
-    }
-});
-
-// Add event listeners for virtual background controls
-virtualBgColorInput.addEventListener('input', async (e) => {
-    colorValueDisplay.textContent = e.target.value;
-    if (isVirtualBackgroundEnabled) {
-        await updateVirtualBackground();
-    }
-});
-
-virtualBgImgUrlInput.addEventListener('input', async () => {
-    if (isVirtualBackgroundEnabled) {
-        await updateVirtualBackground();
-    }
-});
-
-virtualBgVideoUrlInput.addEventListener('input', async () => {
-    if (isVirtualBackgroundEnabled) {
-        await updateVirtualBackground();
-    }
-});
-
-virtualBgBlurSelect.addEventListener('input', async (e) => {
-    const value = parseInt(e.target.value);
-    const blurValue = document.getElementById('blurValue');
-    blurValue.textContent = value === 1 ? 'Low' : value === 2 ? 'Medium' : 'High';
-    if (isVirtualBackgroundEnabled) {
-        await updateVirtualBackground();
-    }
-});
 
 // Helper function to load media with CORS handling
 async function loadMediaWithCORS(url, type) {
@@ -1412,6 +1427,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (switchStreamBtn) switchStreamBtn.addEventListener('click', switchStream);
     if (virtualBgBtn) virtualBgBtn.addEventListener('click', toggleVirtualBackground);
     if (ainsBtn) ainsBtn.addEventListener('click', toggleAins);
+    if (cameraSelect) cameraSelect.addEventListener('change', switchCamera);
 
     // Set initial button states
     if (leaveBtn) {
