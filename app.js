@@ -764,6 +764,25 @@ async function switchCamera() {
     try {
         showPopup("Switching camera...");
 
+        // Prefer Agora's in-place device switching (keeps processors/pipeline intact).
+        // This is the same pattern used in `broadcastaway`.
+        if (typeof localVideoTrack.setDevice === 'function') {
+            await localVideoTrack.setDevice(cameraSelect.value);
+
+            // Ensure the local preview is displaying the (now) updated track.
+            if (localVideoTrack.enabled) {
+                localVideoTrack.play("localVideo");
+            }
+
+            // If VB is enabled, re-apply options so the processor stays consistent.
+            if (shouldRestoreVirtualBackground) {
+                await updateVirtualBackground();
+            }
+
+            showPopup("Camera switched");
+            return;
+        }
+
         // Virtual background processors are tied to the track piping.
         // Disable first so we cleanly unpipe + release.
         if (shouldRestoreVirtualBackground) {
