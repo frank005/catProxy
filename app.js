@@ -776,7 +776,8 @@ async function switchCamera() {
         // Replace the published video track.
         // Guarded by the "only while in a call" check above, so failures here are edge cases.
         try {
-            await client.unpublish(oldVideoTrack);
+            // Agora Web SDK expects an array of tracks to unpublish.
+            await client.unpublish([oldVideoTrack]);
         } catch (e) {
             // If unpublish fails (edge cases), we still proceed with the replacement.
             console.warn("Failed to unpublish old video track:", e);
