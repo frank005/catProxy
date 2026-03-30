@@ -1,4 +1,6 @@
 // Agora client configuration
+window.LOCAL_VIDEO_PLAY_CONFIG = { fit: 'contain' };
+
 let client;
 let client2;
 let localAudioTrack;
@@ -80,6 +82,7 @@ const switchStreamBtn = document.getElementById('switchStreamBtn');
 const virtualBgBtn = document.getElementById('virtualBgBtn');
 const ainsBtn = document.getElementById('ainsBtn');
 const beautyBtn = document.getElementById('beautyBtn');
+const watermarkBtn = document.getElementById('watermarkBtn');
 const localVideo = document.getElementById('localVideo');
 const remoteVideo = document.getElementById('remoteVideo');
 const localStats = document.getElementById('localStats');
@@ -460,7 +463,7 @@ async function createLocalTracks() {
 
         // Play local video track
         localVideo.innerHTML = ''; // Clear no-video div
-        localVideoTrack.play("localVideo");
+        localVideoTrack.play("localVideo", window.LOCAL_VIDEO_PLAY_CONFIG);
 
         // Expose for effect pipeline helpers (beauty.js).
         window.localVideoTrack = localVideoTrack;
@@ -574,10 +577,16 @@ async function joinChannel() {
 
         // Enable control buttons
         [muteMicBtn, muteCameraBtn, switchStreamBtn, virtualBgBtn, ainsBtn, beautyBtn].forEach(btn => {
+            if (!btn) return;
             btn.disabled = false;
             btn.style.opacity = '1';
             btn.style.background = '#fff3cd';
         });
+        if (watermarkBtn) {
+            watermarkBtn.disabled = false;
+            watermarkBtn.style.opacity = '1';
+            watermarkBtn.style.background = '#fff3cd';
+        }
 
         // Mute audio after joining
         if (localAudioTrack) {
@@ -604,6 +613,14 @@ async function leaveChannel() {
                 await window.toggleBeauty();
             } catch (e) {
                 console.warn("Failed to disable beauty on leave:", e);
+            }
+        }
+
+        if (window.isWatermarkEnabled && typeof window.disableWatermark === 'function') {
+            try {
+                await window.disableWatermark();
+            } catch (e) {
+                console.warn("Failed to disable watermark on leave:", e);
             }
         }
 
@@ -704,6 +721,8 @@ async function leaveChannel() {
         if (beautyBtn) beautyBtn.textContent = "Enable Beauty";
         const beautyControlsEl = document.getElementById('beautyControls');
         if (beautyControlsEl) beautyControlsEl.style.display = 'none';
+        window.isWatermarkEnabled = false;
+        if (watermarkBtn) watermarkBtn.textContent = "Enable Watermark";
         muteMicBtn.textContent = "Mute Mic";
         muteCameraBtn.textContent = "Mute Camera";
         switchStreamBtn.textContent = "Set to Low Quality";
@@ -716,10 +735,16 @@ async function leaveChannel() {
 
         // Disable control buttons
         [muteMicBtn, muteCameraBtn, dualStreamBtn, switchStreamBtn, virtualBgBtn, ainsBtn, beautyBtn].forEach(btn => {
+            if (!btn) return;
             btn.disabled = true;
             btn.style.opacity = '0.5';
             btn.style.background = '#fff3cd';
         });
+        if (watermarkBtn) {
+            watermarkBtn.disabled = true;
+            watermarkBtn.style.opacity = '0.5';
+            watermarkBtn.style.background = '#fff3cd';
+        }
 
         // Leave channels
         showPopup("Leaving channels...");
@@ -764,7 +789,7 @@ async function toggleCamera() {
             await localVideoTrack.setEnabled(true);
             muteCameraBtn.textContent = "Mute Camera";
             localVideo.innerHTML = '';
-            localVideoTrack.play("localVideo");
+            localVideoTrack.play("localVideo", window.LOCAL_VIDEO_PLAY_CONFIG);
         }
     }
 }
@@ -789,7 +814,7 @@ async function switchCamera() {
 
             // Ensure the local preview is displaying the (now) updated track.
             if (localVideoTrack.enabled) {
-                localVideoTrack.play("localVideo");
+                localVideoTrack.play("localVideo", window.LOCAL_VIDEO_PLAY_CONFIG);
             }
 
             // If VB is enabled, re-apply options so the processor stays consistent.
@@ -835,7 +860,7 @@ async function switchCamera() {
         });
 
         localVideoTrack = newVideoTrack;
-        localVideoTrack.play("localVideo");
+        localVideoTrack.play("localVideo", window.LOCAL_VIDEO_PLAY_CONFIG);
 
         try {
             await client.publish([localVideoTrack]);
@@ -952,6 +977,8 @@ function showPopup(message) {
         }, 300);
     }, 5000); // Increased from 3000 to 5000ms
 }
+
+window.showPopup = showPopup;
 
 // Helper function to load media with CORS handling
 async function loadMediaWithCORS(url, type) {
@@ -1115,7 +1142,7 @@ async function toggleVirtualBackground() {
             }
 
             processor.setOptions(options);
-            await processor.enable();
+            // Enable once inside rebuildVideoPipeline (avoids double-enable flicker)
 
             // Store for the shared effect pipeline (beauty.js).
             window.virtualBackgroundProcessor = processor;
@@ -1126,6 +1153,7 @@ async function toggleVirtualBackground() {
 
             // Let the pipeline helper wire processors (supports Beauty + VB together).
             if (window.rebuildVideoPipeline) {
+                await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
                 await window.rebuildVideoPipeline();
             }
 
@@ -1288,6 +1316,13 @@ function stopStatsMonitoring() {
 // Update stats display
 function updateStats(clientStats, clientStats2, localVideoStats, remoteVideoStats) {
     const duration = Math.floor((Date.now() - startTime) / 1000);
+
+    // Expose current outgoing send resolution so watermark auto-corners can follow profile changes.
+    window.currentSendResolutionWidth = Number(localVideoStats?.sendResolutionWidth) || 0;
+    window.currentSendResolutionHeight = Number(localVideoStats?.sendResolutionHeight) || 0;
+    if (window.maybeRefreshWatermarkLayoutForResolutionChange) {
+        Promise.resolve(window.maybeRefreshWatermarkLayoutForResolutionChange()).catch(() => {});
+    }
     
     // Update overall stats
     document.getElementById('overallStats').innerHTML = [
@@ -1480,6 +1515,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (switchStreamBtn) switchStreamBtn.addEventListener('click', switchStream);
     if (virtualBgBtn) virtualBgBtn.addEventListener('click', toggleVirtualBackground);
     if (ainsBtn) ainsBtn.addEventListener('click', toggleAins);
+    if (watermarkBtn) {
+        watermarkBtn.addEventListener('click', async () => {
+            if (window.toggleWatermark) {
+                await window.toggleWatermark();
+            } else {
+                showPopup('Watermark module not loaded');
+            }
+        });
+    }
     if (cameraSelect) cameraSelect.addEventListener('change', switchCamera);
 
     // Set initial button states
@@ -1489,11 +1533,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     [muteMicBtn, muteCameraBtn, dualStreamBtn, switchStreamBtn, virtualBgBtn, ainsBtn, beautyBtn].forEach(btn => {
-        if (btn) {
-            btn.disabled = true;
-            btn.style.opacity = '0.5';
-        }
+        if (!btn) return;
+        btn.disabled = true;
+        btn.style.opacity = '0.5';
     });
+    if (watermarkBtn) {
+        watermarkBtn.disabled = false;
+        watermarkBtn.style.opacity = '1';
+    }
 
     // Handle window resize for charts
     window.addEventListener('resize', () => {

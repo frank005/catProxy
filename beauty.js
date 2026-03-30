@@ -1,3 +1,12 @@
+/**
+ * Local camera pipeline orchestration for this demo.
+ * Virtual background is created in app.js; beauty and watermark live in their own modules,
+ * but every effect must be chained in one order (VB → beauty → watermark → encoder).
+ * rebuildVideoPipeline / cleanupProcessors live here for that reason — not because watermark
+ * is part of the beauty SDK. Processor release for watermark is handled in watermark.js when
+ * you turn the feature off or leave the channel; cleanupProcessors only unpipes/disables so
+ * the chain can be rebuilt, same pattern as VB + beauty.
+ */
 let beautyProcessor = null;
 let virtualBgProcessor = null;
 let beautyEnabled = false;
@@ -32,14 +41,22 @@ async function cleanupProcessors() {
     console.log("Cleaning up all processors...");
 
     try {
-        // First unpipe the video track from any existing connections
-        if (window.localVideoTrack) {
-            console.log("Unpiping video track");
-            await window.localVideoTrack.unpipe();
-            console.log("Video track unpiped successfully");
+        // Teardown downstream → upstream (track → … → watermark → processorDestination).
+        // Calling localVideoTrack.unpipe() first leaves the last processor still piped to
+        // VideoProcessorDestination, so the next rebuild throws "already piped".
+
+        // Watermark — unpipe/disable only (release happens in watermark.js on turn-off / leave)
+        if (window.watermarkProcessor) {
+            console.log("Cleaning up watermark processor");
+            try {
+                await window.watermarkProcessor.unpipe();
+                await window.watermarkProcessor.disable();
+                console.log("Watermark processor cleaned up");
+            } catch (error) {
+                console.error("Error cleaning up watermark processor:", error);
+            }
         }
 
-        // Then disable and unpipe beauty processor if it exists
         if (beautyProcessor) {
             console.log("Cleaning up beauty processor");
             try {
@@ -51,7 +68,6 @@ async function cleanupProcessors() {
             }
         }
 
-        // Then disable and unpipe virtual background processor if it exists
         const vbProcessor = window.virtualBackgroundProcessor || virtualBgProcessor;
         if (vbProcessor) {
             console.log("Cleaning up virtual background processor");
@@ -64,24 +80,52 @@ async function cleanupProcessors() {
             }
         }
 
-        // Reset pipeline reference
-        currentPipeline = null;
-
-        // Reset processor destination
-        if (window.localVideoTrack && window.localVideoTrack.processorDestination) {
-            try {
-                window.localVideoTrack.processorDestination = null;
-                console.log("Reset processor destination");
-            } catch (error) {
-                console.error("Error resetting processor destination:", error);
-            }
+        if (window.localVideoTrack) {
+            console.log("Unpiping video track");
+            await window.localVideoTrack.unpipe();
+            console.log("Video track unpiped successfully");
         }
+
+        currentPipeline = null;
 
         console.log("All processors cleaned up");
     } catch (error) {
         console.error("Error during cleanup:", error);
         throw error;
     }
+}
+
+/**
+ * Self-view can stay on the raw camera until the preview video element is rebound after the pipeline
+ * includes VideoWatermarkProcessor. Only then use stop + deferred play (pipe→enable order must stay correct).
+ */
+function refreshLocalVideoPlayback() {
+    const track = window.localVideoTrack;
+    if (!track) return;
+    const containerId = 'localVideo';
+    const play = () => {
+        try {
+            const cfg = typeof window !== 'undefined' && window.LOCAL_VIDEO_PLAY_CONFIG
+                ? window.LOCAL_VIDEO_PLAY_CONFIG
+                : { fit: 'contain' };
+            track.play(containerId, cfg);
+        } catch (e) {
+            console.warn('refreshLocalVideoPlayback play:', e);
+        }
+    };
+    if (!window.isWatermarkEnabled) {
+        return;
+    }
+    try {
+        if (track.isPlaying) {
+            track.stop();
+        }
+    } catch (e) {
+        console.warn('refreshLocalVideoPlayback stop:', e);
+    }
+    queueMicrotask(() => {
+        requestAnimationFrame(play);
+    });
 }
 
 // Helper function to rebuild the video pipeline
@@ -122,10 +166,25 @@ async function rebuildVideoPipeline() {
                 console.log("Added beauty to pipeline");
             }
 
-            // Step 3: Connect to destination
+            // Step 3: Watermark — must pipe before enable so the extension receives onTrack / context
+            // (enable-then-pipe matches VB/beauty but breaks VideoWatermarkProcessor output).
+            if (window.isWatermarkEnabled && window.watermarkProcessor) {
+                console.log("Adding watermark to pipeline");
+                chain = chain.pipe(window.watermarkProcessor);
+                console.log("Added watermark to pipeline");
+            }
+
+            // Step 4: Connect to destination
             console.log("Connecting to processor destination");
             chain = chain.pipe(window.localVideoTrack.processorDestination);
+
+            if (window.isWatermarkEnabled && window.watermarkProcessor) {
+                await window.watermarkProcessor.enable();
+            }
+
             currentPipeline = chain;
+
+            refreshLocalVideoPlayback();
 
             console.log("Pipeline rebuilt successfully");
         } catch (error) {
@@ -317,4 +376,5 @@ window.updateBeautyParams = updateBeautyParams;
 window.initBeautyControls = initBeautyControls;
 window.rebuildVideoPipeline = rebuildVideoPipeline;
 window.cleanupProcessors = cleanupProcessors;
+window.refreshLocalVideoPlayback = refreshLocalVideoPlayback;
 
